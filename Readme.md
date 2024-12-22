@@ -76,7 +76,7 @@ Once the neural network is created, you can use the `computeOutput` method to ca
 1. Clone the repository:
 
    ```bash
-   git clone "future repository url here"
+   git clone git@github.com:emartin2109/lobotomy-learning-v2.git
    ```
 
 2. Include the library headers in your C++ project.
