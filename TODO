@@ -1,0 +1,3 @@
+-   Implement Mini-Batch gradient descent instead of Full Batch gradient descent
+    it will allow for faster learning iterations but loose precision
+    the user should be able to choose the learning algorithm
