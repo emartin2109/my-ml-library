@@ -1,46 +1,59 @@
-#include "configClasses/layerConfig.hpp"
-#include "neuralNetwork/NeuralNetworkFactory.hpp"
+#include "configClasses/dataPoint.hpp"
+#include "configClasses/hyperParameters.hpp"
+#include "configClasses/neuralNetworkConfig.hpp"
+#include "neuralNetwork/NeuralNetwork.hpp"
 
-#include <cstddef>
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <algorithm> // For std::shuffle
+#include <random>    // For std::default_random_engine
 
 
-int main() {
-    std::vector<LayerConfig> neuralNetworkConfig = {
-        LayerConfig({2, "None"}),
-        LayerConfig({5, "Sigmoid"}),
-        LayerConfig({1, "Linear"})
-    };
+NeuralNetwork createNeuralNetwork() {
+    NeuralNetworkConfig nnConfig;
+
+    nnConfig.addLayer({2, "None"});
+    nnConfig.addLayer({3, "Sigmoid"});
+    nnConfig.addLayer({3, "Sigmoid"});
+    nnConfig.addLayer({1, "Linear"});
 
     HyperParameters hyperParameters;
     hyperParameters.learningRate = 0.1;
 
-    NeuralNetworkFactory nnf(neuralNetworkConfig, hyperParameters);
+    nnConfig.setHyperParameters(hyperParameters);
 
-    std::unique_ptr<NeuralNetwork> nn = nnf.create();
+    return NeuralNetwork(nnConfig);
+}
 
-    std::vector<std::vector<std::vector<double>>> datasets {
-        {{0, 0}, {1, 0}, {0, 1}, {1, 1}},
-        {{0}, {1}, {1}, {0}}
+int main() {
+    std::unique_ptr<NeuralNetwork> nn = std::make_unique<NeuralNetwork>(createNeuralNetwork());
+
+    std::vector<DataPoint> dataset {
+        {{0, 0}, {0}},
+        {{1, 0}, {1}},
+        {{0, 1}, {1}},
+        {{1, 1}, {1}}
     };
 
-    unsigned int epoch = 1000;
+    unsigned int epoch = 10000;
     for (unsigned int i = 0; i < epoch; i++) {
         double avgError = 0.0;
 
-        for (size_t j = 0; j < datasets[0].size(); j++) {
-            std::vector<double> output = nn->computeOutput(datasets[0][j]);
-            avgError += nn->computeError(datasets[0][j], datasets[1][j]);
-            nn->learn(datasets[0][j], datasets[1][j]);
+        std::shuffle(dataset.begin(), dataset.end(), std::default_random_engine{});
 
-            // show output
-            std::cout << "Input: " << datasets[0][j][0] << ", " << datasets[0][j][1] << ", Output: " << output[0] << ", Expected: " << datasets[1][j][0] << std::endl;
+        nn->learn(dataset);
+
+        for (DataPoint dp : dataset) {
+            nn->computeOutput(dp.inputs);
+            avgError += nn->computeError(dp.expectedOutputs);
         }
         
-        std::cout << "Epoch: " << i << ", Average Error: " << avgError / datasets[0].size() << std::endl << std::endl;
+        std::cout << "average error at epoch " << i << " is " << avgError / dataset.size() << std::endl;
     }
 
-    return 0;
+    std::cout << "\nFinal predictions:" << std::endl;
+    for (DataPoint dp : dataset) {
+        std::cout << "Inputs {" << dp.inputs[0] << ", " << dp.inputs[1] << "} Output: {" << nn->computeOutput(dp.inputs)[0] << "} Excpected: {" << dp.expectedOutputs[0] << "}" << std::endl;
+    }
 }

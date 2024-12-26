@@ -19,6 +19,12 @@ double sigmoid(double x) {
     return 1.0 / (1.0 + exp(-x));
 }
 
+double linearDerivative(double x) {
+    (void) x;
+    return 1.0;
+}
+
 double sigmoidDerivative(double x) {
     return sigmoid(x) * (1.0 - sigmoid(x));
 }
+
