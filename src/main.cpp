@@ -6,8 +6,8 @@
 #include <iostream>
 #include <memory>
 #include <vector>
-#include <algorithm> // For std::shuffle
-#include <random>    // For std::default_random_engine
+#include <algorithm>
+#include <random>
 
 
 NeuralNetwork createNeuralNetwork() {
