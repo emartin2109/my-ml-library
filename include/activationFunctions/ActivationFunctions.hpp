@@ -9,10 +9,11 @@ double sigmoid(double x);
 double none(double x);
 
 double sigmoidDerivative(double x);
+double linearDerivative(double x);
 
 const std::map<std::string, std::array<std::function<double(double)>, 2>> ACTIVATION_FUNCTIONS_LIST {
     {"None", {none, none}},
     {"Step Function", {stepFunction, none}},
-    {"Linear", {linear, none}},
+    {"Linear", {linear, linearDerivative}},
     {"Sigmoid", {sigmoid, sigmoidDerivative}},
 };

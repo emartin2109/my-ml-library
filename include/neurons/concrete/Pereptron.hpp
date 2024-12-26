@@ -22,11 +22,12 @@ class Pereptron : public ANeuron {
 
     public:
         double computeOutput(const std::vector<double> inputs) {
-            m_output = m_bias;
-
             if (inputs.size() != m_weights.size()) {
                 throw std::invalid_argument("Input size does not match weights size for fcl. input = " + std::to_string(inputs.size()) + " weights = " + std::to_string(m_weights.size()));
             }
+
+            m_inputs = inputs;
+            m_output = m_bias;
 
             for (size_t i = 0; i < inputs.size(); ++i) {
                 m_output += inputs[i] * m_weights[i];
@@ -55,9 +56,13 @@ class Pereptron : public ANeuron {
         void setBias(double bias) { m_bias = bias; }
         void setWeights(const std::vector<double>& weights) { m_weights = weights; }
     
+    public:
+        double nodeValue = 0.0;
+    
     private:
         std::vector<double> m_weights;
         double m_bias;
 
         double m_output = 0.0;
+        std::vector<double> m_inputs = {};
 };

@@ -1,6 +1,9 @@
 #pragma once
 
 #include "../layer/concrete/FCL.hpp"
+#include "../configClasses/neuralNetworkConfig.hpp"
+#include "../activationFunctions/ActivationFunctions.hpp"
+#include "../configClasses/dataPoint.hpp"
 
 #include <cstddef>
 #include <functional>
@@ -8,16 +11,25 @@
 
 class NeuralNetwork {
     public:
-        NeuralNetwork(std::vector<int> layers_sizes, std::vector<std::function<double(double)>> activationFunctions, 
-        std::vector<std::function<double(double)>> derivateActivationFunctions, double learningRate) {
-            int prevLayerSize = 0;
-            for (size_t i = 0; i < layers_sizes.size(); i++) {
-                m_layers.emplace_back(FullyConnectedLayer(layers_sizes[i], prevLayerSize, activationFunctions[i], derivateActivationFunctions[i]));
-                prevLayerSize = layers_sizes[i];
+        NeuralNetwork(NeuralNetworkConfig nnConfig) {
+            unsigned int prevLayerSize = 0;
+            for (size_t i = 0; i < nnConfig.getSize(); i++) {
+                const auto& lConfig = nnConfig.getLayers()[i];
+                unsigned int layerSize = lConfig->neuronsNbr;
+
+                if (ACTIVATION_FUNCTIONS_LIST.find(lConfig->activationFunction) == ACTIVATION_FUNCTIONS_LIST.end()) {
+                    throw std::invalid_argument("Invalid activation function '" + lConfig->activationFunction + "' for layer " + std::to_string(i) + " in the Neural Network Factory");
+                }
+
+                std::function<double(double)> actiavtionFunction = ACTIVATION_FUNCTIONS_LIST.at(lConfig->activationFunction)[0];
+                std::function<double(double)> derivativeActivationFunction = ACTIVATION_FUNCTIONS_LIST.at(lConfig->activationFunction)[1];
+
+
+                m_layers.emplace_back(FullyConnectedLayer(layerSize,prevLayerSize,  actiavtionFunction, derivativeActivationFunction));
+                prevLayerSize = layerSize;
             }
 
-            m_learningRate = learningRate;
-                
+            m_learningRate = nnConfig.getHyperParameters()->learningRate;
         }
 
         ~NeuralNetwork() = default;
@@ -26,71 +38,62 @@ class NeuralNetwork {
         std::vector<double> computeOutput(std::vector<double> inputs) {
             if (m_layers.size() == 0) return {};
 
-            m_layers[0].setOutput(inputs);
+            m_layers[0].setActivatedOutput(inputs);
+            m_layers[0].setWeightedOutput(inputs);
             for (size_t i = 1; i < m_layers.size(); i++)
-                m_layers[i].computeOutputs(m_layers[i - 1].getOutput());
+                m_layers[i].computeOutputs(m_layers[i - 1].getActivatedOutput(), m_layers[i - 1].getWeightedOutput());
 
-            return m_layers[m_layers.size() - 1].getOutput();
+            std::vector<double> output = m_layers[m_layers.size() - 1].getActivatedOutput();
+
+            lastInput = inputs;
+            lastOutput = output;
+
+            return output;
         }
 
-        double computeError(std::vector<double> inputs, std::vector<double> expected) {
-            // need to recompute the predicted output here
-            computeOutput(inputs);
+        double computeError(std::vector<double> expected) {
             return m_layers[m_layers.size() - 1].computeError(expected);
         }
 
-        double computeErrorDerivative(std::vector<double> inputs, std::vector<double> expected) {
-            // need to recompute the predicted output here
-            computeOutput(inputs);
+        double computeErrorDerivative(std::vector<double> expected) {
             return m_layers[m_layers.size() - 1].computeErrorDerivative(expected);
         }
 
         void updateAllGradients(std::vector<double> inputs, std::vector<double> expectedOutputs) {
             computeOutput(inputs);
 
-            FullyConnectedLayer outputLayer = m_layers[m_layers.size() - 1];
-            std::vector<double> nodeValues = outputLayer.computeNodeValues(expectedOutputs);
+            // Backpropagation algorithm
+            std::vector<double> nodeValues = m_layers[m_layers.size() - 1].computeNodeValues(expectedOutputs);
+            m_layers[m_layers.size() - 1].updateGradients(nodeValues);
+
+            for (int hiddenLayerI = static_cast<int>(m_layers.size()) - 2; hiddenLayerI >= 1; hiddenLayerI--) {
+                nodeValues = m_layers[hiddenLayerI].calculateHiddenLayerNodeValues(m_layers[hiddenLayerI + 1], nodeValues);
+                m_layers[hiddenLayerI].updateGradients(nodeValues);
+            }
         }
 
-        // for the time being learning is done through gradient descent (using finite-difference method)
-        // replace that with derivative function for the future for better performance and lisibility
-        void learn(std::vector<double> inputs, std::vector<double> excpected) {
-            const double h = 0.0001;
-            double originalCost = computeError(inputs, excpected);
+        void applyAllGradients(double eta) {
+            for (size_t i = 0; i < m_layers.size(); i++)
+                m_layers[i].applyGradients(eta);
+        }
 
-            for (size_t i = 0; i < m_layers.size(); i++) {
-                m_layers[i].costGradientBias.clear();
-                m_layers[i].costGradientWeights.clear();
-                for (size_t j = 0; j < m_layers[i].neurons.size(); j++) {
-                    m_layers[i].costGradientWeights.emplace_back();
-                    std::vector<double> originalWeights = m_layers[i].neurons[j].getWeights();
-                    for (size_t k = 0; k < originalWeights.size(); k++) {
-                        originalWeights[k] += h;
-                        m_layers[i].neurons[j].setWeights(originalWeights);
-                        double deltaCost = computeError(inputs, excpected) - originalCost;
+        void clearAllGradients() {
+            for (size_t i = 0; i < m_layers.size(); i++)
+                m_layers[i].clearGradients();
+        }
 
-                        originalWeights[k] -= h;
-                        m_layers[i].neurons[j].setWeights(originalWeights);
+        void learn(std::vector<DataPoint> trainingBatch) {
+            for (DataPoint dataPoint : trainingBatch)
+                updateAllGradients(dataPoint.inputs, dataPoint.expectedOutputs);
 
-                        m_layers[i].costGradientWeights[j].emplace_back(deltaCost / h);
-                    }
-                }
-                for (size_t j = 0; j < m_layers[i].neurons.size(); j++) {
-                    double originalBias = m_layers[i].neurons[j].getBias();
-                    m_layers[i].neurons[j].setBias(originalBias + h);
-                    double deltaCost = computeError(inputs, excpected) - originalCost;
-                    m_layers[i].neurons[j].setBias(originalBias);
-
-                    m_layers[i].costGradientBias.emplace_back(deltaCost / h);
-                }
-            }
-
-            for (size_t i = 0; i < m_layers.size(); i++) {
-                m_layers[i].applyGradients(m_learningRate);
-            }
+            applyAllGradients(m_learningRate / trainingBatch.size());
+            clearAllGradients();
         }
 
     private:
         double m_learningRate;
         std::vector<FullyConnectedLayer> m_layers;
+
+        std::vector<double> lastInput;
+        std::vector<double> lastOutput;
 };
